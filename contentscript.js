@@ -1,65 +1,41 @@
-// chrome.extension.onMessage.addListener(function(msg, sender, sendResponse){
-//   console.log("hi from constentscript");
-//   if(msg.action == 'makeStringFromDOM'){
-//     var html = DOMtoString(document.documentElement);
-//     console.log(html);
-//     replaceWithHTML(html, document.documentElement);
-//   }
-// });
-
 chrome.extension.onMessage.addListener(function(msg, sender, sendResponse){
   if(msg.action == 'makeStringFromDOM'){
     if(document.readyState === "complete"){
-        console.log("completed!");
+//        console.log("completed!");
         init();
     } else {
-        console.log("not completed");
+//        console.log("not completed");
         window.addEventListener("onload", init, false);
     }
   }
 });
 
-// onload = init();
-
-//http://stackoverflow.com/questions/8100576/how-to-check-if-dom-is-ready-without-a-framework
-// if(document.readyState === "complete"){
-//     console.log("completed!");
-//     init();
-// } else {
-//     console.log("not completed");
-//     window.addEventListener("onload", init, false);
-// }
-
 function init(){
     console.log("in init!");
     var posts = document.querySelectorAll("div.g");
     for(var i=0, length = posts.length; i<length; i++){
-        modifyHTML(posts[i]);
-        console.log(posts[i]);
+//        console.log("before", posts[i]);
+        var newNode = DOMtoStringtoNode(posts[i]);
+        console.log(newNode);
+        posts[i].innerHTML = newNode.innerHTML;
+//        console.log("after", posts[i]);
     }
 }
 
-
-function modifyHTML(element){
-    var html = DOMtoString(element);
-    element.innerText = html;
-}
-
-// var html = DOMtoString(document.documentElement);
-// console.log(html);
-// replaceWithHTML(html, document.documentElement);
-
-//http://stackoverflow.com/questions/11684454/getting-the-source-html-of-the-current-page-from-chrome-extension
-// @author Rob W <http://stackoverflow.com/users/938089/rob-w>
-// Demo: var serialized_html = DOMtoString(document);
-
-function DOMtoString(document_root) {
+function DOMtoStringtoNode(root) {
+    var containerNode = createNode("div", "container", "container");
     var html = '',
-        node = document_root.firstChild;
+        node = root.firstChild;
+     var htmlNode = createNode("div", "actual", null);
     while (node) {
         switch (node.nodeType) {
         case Node.ELEMENT_NODE:
-            html += node.outerHTML;
+            if(node.nodeName === "A"){
+//                console.log("link!", node);
+                handleAnchorTag(node);
+            } else {
+                html += node.outerHTML;
+            }
             break;
         case Node.TEXT_NODE:
             html += node.nodeValue;
@@ -77,18 +53,62 @@ function DOMtoString(document_root) {
         }
         node = node.nextSibling;
     }
-    return html;
+    htmlNode.innerText = html;
+    containerNode.appendChild(htmlNode);
+    return containerNode;
+
+    //makes a new DOM node with element type, id, and class specified
+    function createNode(elementType, ID, Class){
+        var node = document.createElement(elementType);
+        if(ID != null){
+            node.id = ID;
+        }
+
+        if(Class != null){
+            node.className = Class;
+        }
+
+        return node;
+    }
+
+    //adds all collected HTML to a container node
+    //then creates an achor tag such that <a href="link">text</a> -> <a href="link"> <a href="link">text</a> </a>
+    //adds this node to the container
+    //creates a new HTML node to continue collected, and refreshes html
+    function handleAnchorTag(anchor){
+        htmlNode.innerText = html;
+        containerNode.appendChild(htmlNode);
+        htmlNode = createNode("div", "actual", "anchortag");
+        htmlAnchor = createNode("a", null, null);
+        htmlAnchor.className = anchor.className;
+        htmlAnchor.id = anchor.id;
+        htmlAnchor.href = anchor.href;
+        htmlAnchor.innerText = anchor.outerHTML;
+        htmlNode.appendChild(htmlAnchor);
+        // htmlNode.innerHTML = spliceHTMLintoAnchor(anchor);
+        containerNode.appendChild(htmlNode);
+        html = '';
+        htmlNode = createNode("div", "actual", null);
+
+        function spliceHTMLintoAnchor(anchor){
+//            console.log(anchor.innerText);
+            var code = "";
+            code += anchor.outerHTML;
+            var middle = {"startInd": -1, "startFound":false, "endFound":false, "endInd": -1};
+            for(var i=0, length=code.length; i<length; i++){
+                if(code.charAt(i) == ">" && !middle.startFound){
+                    middle.startFound = true;
+                    middle.startInd = i+1;
+                }
+                if(code.charAt(i) == "<" && middle.startFound){
+                    middle.endFound = true;
+                    middle.endInd = i-1;
+                }
+            }
+            var newHTML = code.slice(0, middle.startInd);
+            newHTML += code;
+            newHTML += code.slice(middle.endInd+1, code.length);
+            return newHTML;
+        }
+    }
 }
-
-// function replaceWithHTML(html, document_root){
-//     console.log("replaceWithHTML");
-
-//     var htmlNode = document.createElement("div");
-//     htmlNode.id = "actualHTML";
-//     htmlNode.innerText = html;
-//     console.log(htmlNode);
-
-//     document.body.insertBefore(htmlNode, document.body.childNodes[0]);
-
-//     console.log(document_root.childNodes);
-// }
