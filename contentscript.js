@@ -17,7 +17,8 @@ function init(){
 //        console.log("before", posts[i]);
         var newNode = DOMtoStringtoNode(posts[i]);
         console.log(newNode);
-        posts[i].innerHTML = newNode.innerHTML;
+        posts[i].parentNode.insertBefore(newNode, posts[i]);
+        posts[i].parentNode.removeChild(posts[i]);
 //        console.log("after", posts[i]);
     }
 }
