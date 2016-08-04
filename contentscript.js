@@ -1,90 +1,120 @@
-// chrome.extension.onMessage.addListener(function(msg, sender, sendResponse){
-//   if(msg.action == 'makeStringFromDOM'){
-//     if(document.readyState === "complete"){
-// //        console.log("completed!");
-//         init();
-//     } else {
-// //        console.log("not completed");
-//         window.addEventListener("onload", init, false);
-//     }
-//   }
-// });
-
-// document.addEventListener("click", init);
-// var clicked = false;
-
-// document.addEventListener("DOMContentLoaded", readyToStart, false);
-
-if(document.readyState === "interactive" || document.readyState === "complete"){
-    console.log("document is ready");
-    // readyToStart();
-    init();
-} else {
-    console.log("document is not ready, added listener");
-    // window.addEventListener("onload", readyToStart, false);
-    window.addEventListener("onload", init, false);
-
-}
-
-//https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver
-function readyToStart(){
-    console.log("in readytostart");
-    var target = document.body;
-    var observer = new MutationObserver(init);
-    var config = {childList: true};
-    observer.observe(target, config);
-
-}
-
-
+if(document.readyState === "complete" || document.readyState === "interactive"){
+        init();
+    } else {
+        window.addEventListener("onload", init, false);
+    }
 
 function init(){
-    // var intervalID = window.setInterval(init, 1000);
-    document.addEventListener("click", init);
-    // if(!clicked){
-        console.log("in init!");
-        // clicked = true;
-        var children = Array.prototype.slice.call(document.body.childNodes);
-        for(var i=0, length=children.length; i<length; i++){
-            var child = children[i];
-            if(child.nodeType === Node.ELEMENT_NODE){
-                var insertNode = toStringDOM(child);
-                child.parentNode.insertBefore(insertNode, child);
-                child.parentNode.removeChild(child);
-            } else {
-                wrapNonElementNode(child);
-            }
-        }
-    // }
-
+    htmlify();
+    document.addEventListener("click", function(){
+        var timer = setTimeout(htmlify, 500);
+    });
 }
 
-function wrapNonElementNode(node){
-    var wrapper = document.createElement("div");
-    wrapper.className = "scriptNode";
-    node.parentNode.insertBefore(wrapper, node);
-    node.parentNode.removeChild(node);
-    wrapper.appendChild(node);
-    return wrapper;
+function htmlify(){
+    var children = Array.prototype.slice.call(document.body.childNodes);
+    for(var i=0; i<children.length; i++){
+        var child = children[i];
+        if(child.nodeType === Node.ELEMENT_NODE){
+            var insertNode = toStringDOM(child);
+            if(insertNode){
+                if(insertNode.hasChildNodes){
+                    var childrenAry = Array.prototype.slice.call(insertNode.childNodes);
+                    for(var m=0, length=childrenAry.length; m<length; m++){
+                        var childNewNode = childrenAry[m];
+                        child.parentNode.insertBefore(childNewNode, child);
+                        child.parentNode.removeChild(child);
+                    }
+                } else {
+                    child.parentNode.insertBefore(insertNode, child);
+                    child.parentNode.removeChild(child);
+                }
+            } else {
+                var newDOMNodes = scanDOM(child);
+                for(var j=0; j<newDOMNodes.length; j++){
+                    var newDOMNode = newDOMNodes[j];
+                    var insertNode = toStringDOM(newDOMNode);
+                    if(insertNode){
+                        if(insertNode.hasChildNodes){
+                            var childrenAry = Array.prototype.slice.call(insertNode.childNodes);
+                            for(var k=0, length=childrenAry.length; k<length; k++){
+                                var childNewDOMNode = childrenAry[k];
+                                newDOMNode.parentNode.insertBefore(childNewDOMNode, newDOMNode);
+                                newDOMNode.parentNode.removeChild(newDOMNode);
+                            }
+                        } else {
+                            newDOMNode.parentNode.insertBefore(insertNode, newDOMNode);
+                            newDOMNode.parentNode.removeChild(newDOMNode);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+//depth first search, making a list of unvisited nodes to turn into html
+function scanDOM(node){
+    var newNodes = [];
+
+    findNewNodes(node);
+    return newNodes;
+
+    function findNewNodes(checkNode){
+        if(checkNode.visited === true){
+            if(checkNode.hasChildNodes()){
+                var childrenAry = Array.prototype.slice.call(checkNode.childNodes);
+                for(var i=0, length=childrenAry.length; i<length; i++){
+                    var child = childrenAry[i];
+                    var potentialNewNode = findNewNodes(child);
+                    if(potentialNewNode){
+                        newNodes.push(potentialNewNode);
+                    }
+                }
+            }
+        } else {
+            return checkNode;
+        }
+    }
 }
 
 //depth first search!
 function toStringDOM(node, processingNodes){
-    if(!(node.classList)){ //node not capable of having a classList
-        if(node.parentNode){
-            if(node.parentNode.classList.contains("scriptNode")){
-                searchForNewNodes(node);
-            } else {
-                return actuallyApply(node);
-            }
-        } else {
-            return actuallyApply(node);
-        }
-    } else if(!node.classList.contains("scriptNode")){ //if first time looking at this node
-    // if(node.scriptNode != true){ //if created from my script, leave it alone and travel to children looking for new nodes
-        return actuallyApply(node);
+    //already been here!
+    if(node.visited === true){
+        return null;
+    }
+
+    //if unvisited, process node
+    node.visited = true;
+    if(node.nodeType === Node.ELEMENT_NODE){
+        var htmlCode = outerInnerHTMLDifference(node.outerHTML, node.innerHTML);
+        var newNode = arrangeNewNode(htmlCode);
+        var potentialProcessing = insert(newNode, processingNodes);
     } else {
-        searchForNewNodes(node);
+        var potentialProcessing = insert(node, processingNodes);
+    }
+
+    //means that this node is the root node
+    if(potentialProcessing !== null){
+        processingNodes = {containerNode: potentialProcessing, root: true};
+    }
+
+
+    //visit all unvisited children
+    if(node.hasChildNodes()){
+        var childrenAry = Array.prototype.slice.call(node.childNodes);
+        for(var i=0, length=childrenAry.length; i<length; i++){
+            var child = childrenAry[i];
+            if(child.visited != true){
+                toStringDOM(child, {containerNode: newNode, appendBefore: newNode.lastChild, root: false});
+            }
+        }
+    }
+
+    //gone through all children of root node = done!
+    if(processingNodes.root){
+        return processingNodes.containerNode;
     }
 
     function outerInnerHTMLDifference(outer, inner){
@@ -96,13 +126,13 @@ function toStringDOM(node, processingNodes){
     }
 
     function arrangeNewNode(rippedhtml){
-        //var newNode = document.createElement(node.nodeName);
         var newNode = node.cloneNode(false);
-        // newNode.scriptNode = true;
-        newNode.className += " scriptNode";
+        newNode.visited = true;
         newNode = assignAllOriginalValues(node, newNode);
         var startCode = document.createTextNode(rippedhtml.startC);
+        startCode.visited = true;
         var endCode = document.createTextNode(rippedhtml.endC);
+        endCode.visited = true;
         newNode.appendChild(startCode);
         newNode.appendChild(endCode);
         return newNode;
@@ -123,63 +153,10 @@ function toStringDOM(node, processingNodes){
             return null;
         } else {
             var newContainer = document.createElement("div");
+            newContainer.visited = true;
             newContainer.appendChild(nodeNew);
             return newContainer;
         }
     }
-
-    function searchForNewNodes(node){
-        if(node.hasChildNodes()){
-            var childrenAry = Array.prototype.slice.call(node.childNodes);
-            for(var i=0, length=childrenAry.length; i<length; i++){
-                var child = childrenAry[i];
-                if(child.vistied != true){
-                    return toStringDOM(child);
-                }
-            }
-        }
-    }
-
-    function actuallyApply(node, processingNodes){
-        //already been here!
-        if(node.visited == true){
-            return;
-        }
-
-        //if unvisited, process node
-        node.visited = true;
-        if(node.nodeType === Node.ELEMENT_NODE){
-            node.className += " scriptNode";
-            var htmlCode = outerInnerHTMLDifference(node.outerHTML, node.innerHTML);
-            var newNode = arrangeNewNode(htmlCode);
-            var potentialProcessing = insert(newNode, processingNodes);
-        } else {
-            var wrapper = wrapNonElementNode(node);
-            var potentialProcessing = insert(wrapper, processingNodes);
-        }
-
-        //means that this node is the root node
-        if(potentialProcessing !== null){
-            processingNodes = {containerNode: potentialProcessing, root: true};
-        }
-
-
-        //visit all unvisited children
-        if(node.hasChildNodes()){
-            var childrenAry = Array.prototype.slice.call(node.childNodes);
-            for(var i=0, length=childrenAry.length; i<length; i++){
-                var child = childrenAry[i];
-                if(child.visited != true){
-                    actuallyApply(child, {containerNode: newNode, appendBefore: newNode.lastChild, root: false});
-                }
-            }
-        }
-
-        //gone through all children of root node = done!
-        if(processingNodes.root){
-            return processingNodes.containerNode;
-        }
-    }
-
 
 }
